@@ -12,27 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#pragma once
-
-#include "pkgname/visibility_control.h"
-
-// Headers in ROS2
+// Headers in this package
+#include <memory>
+#include <ouagv_ekf/ouagv_ekf_component.hpp>
 #include <rclcpp/rclcpp.hpp>
 
-// Headers needed in pub/sub, exposed types
-#include <memory>  // shared_ptr in pub_
-//#include <perception_msgs/msg/tracking2_d.hpp> // Tracking2D in pub_
-
-namespace pkgname
+int main(int argc, char *argv[])
 {
-class ExampleComponent : public rclcpp::Node
-{
-public:
-  PKGNAME_PUBLIC
-  explicit ExampleComponent(const rclcpp::NodeOptions & options);
-
-private:
-  //  std::shared_ptr<rclcpp::Publisher<perception_msgs::msg::Tracking2D>> pub_;
-  //  std::shared_ptr<rclcpp::Subscription<perception_msgs::msg::Tracking2D>> sub_;
-};
-}  // namespace pkgname
+  rclcpp::init(argc, argv);
+  rclcpp::NodeOptions options;
+  auto component = std::make_shared<ouagv_ekf::EkfComponent>(options);
+  rclcpp::spin(component);
+  rclcpp::shutdown();
+  return 0;
+}

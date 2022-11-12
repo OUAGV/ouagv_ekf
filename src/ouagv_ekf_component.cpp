@@ -13,20 +13,20 @@
 // limitations under the License.
 
 // Headers in this package
-#include "pkgname/example_component.hpp"
+#include "ouagv_ekf/ouagv_ekf_component.hpp"
 
 // Components
 #include <rclcpp_components/register_node_macro.hpp>
 
 // Headers needed in this component
 
-namespace pkgname
+namespace ouagv_ekf
 {
-ExampleComponent::ExampleComponent(const rclcpp::NodeOptions & options)
-: Node("example_node", options)
-{
-  //TODO:
-}
-}  // namespace pkgname
+  EkfComponent::EkfComponent(const rclcpp::NodeOptions &options)
+      : Node("ouagv_ekf_node", options)
+  {
+    // TODO:
+  }
+} // namespace ouagv_ekf
 
-RCLCPP_COMPONENTS_REGISTER_NODE(pkgname::ExampleComponent)
+RCLCPP_COMPONENTS_REGISTER_NODE(ouagv_ekf::EkfComponent)

@@ -12,38 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef PKGNAME__VISIBILITY_CONTROL_H_
-#define PKGNAME__VISIBILITY_CONTROL_H_
+#ifndef OUAGV_EKF__VISIBILITY_CONTROL_H_
+#define OUAGV_EKF__VISIBILITY_CONTROL_H_
 
 // This logic was borrowed (then namespaced) from the examples on the gcc wiki:
 //     https://gcc.gnu.org/wiki/Visibility
 
 #if defined _WIN32 || defined __CYGWIN__
 #ifdef __GNUC__
-#define PKGNAME_EXPORT __attribute__((dllexport))
-#define PKGNAME_IMPORT __attribute__((dllimport))
+#define OUAGV_EKF_EXPORT __attribute__((dllexport))
+#define OUAGV_EKF_IMPORT __attribute__((dllimport))
 #else
-#define PKGNAME_EXPORT __declspec(dllexport)
-#define PKGNAME_IMPORT __declspec(dllimport)
+#define OUAGV_EKF_EXPORT __declspec(dllexport)
+#define OUAGV_EKF_IMPORT __declspec(dllimport)
 #endif
-#ifdef PKGNAME_BUILDING_LIBRARY
-#define PKGNAME_PUBLIC PKGNAME_EXPORT
+#ifdef OUAGV_EKF_BUILDING_LIBRARY
+#define OUAGV_EKF_PUBLIC OUAGV_EKF_EXPORT
 #else
-#define PKGNAME_PUBLIC PKGNAME_IMPORT
+#define OUAGV_EKF_PUBLIC OUAGV_EKF_IMPORT
 #endif
-#define PKGNAME_PUBLIC_TYPE PKGNAME_PUBLIC
-#define PKGNAME_LOCAL
+#define OUAGV_EKF_PUBLIC_TYPE OUAGV_EKF_PUBLIC
+#define OUAGV_EKF_LOCAL
 #else
-#define PKGNAME_EXPORT __attribute__((visibility("default")))
-#define PKGNAME_IMPORT
+#define OUAGV_EKF_EXPORT __attribute__((visibility("default")))
+#define OUAGV_EKF_IMPORT
 #if __GNUC__ >= 4
-#define PKGNAME_PUBLIC __attribute__((visibility("default")))
-#define PKGNAME_LOCAL __attribute__((visibility("hidden")))
+#define OUAGV_EKF_PUBLIC __attribute__((visibility("default")))
+#define OUAGV_EKF_LOCAL __attribute__((visibility("hidden")))
 #else
-#define PKGNAME_PUBLIC
-#define PKGNAME_LOCAL
+#define OUAGV_EKF_PUBLIC
+#define OUAGV_EKF_LOCAL
 #endif
-#define PKGNAME_PUBLIC_TYPE
+#define OUAGV_EKF_PUBLIC_TYPE
 #endif
 
-#endif  // PKGNAME__VISIBILITY_CONTROL_H_
+#endif // OUAGV_EKF__VISIBILITY_CONTROL_H_

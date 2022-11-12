@@ -1,0 +1,15 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/rospy2/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/rosboard/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/robotx_msgs/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/robotx_behavior_msgs/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/perception_msgs/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/pcl_apps_msgs/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/hermite_path_msgs/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/grid_map_msgs/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/geodesy/lib/python3.8/site-packages",
+        "/home/tatsuki/ouxt_automation/robotx_ws/install/geographic_msgs/lib/python3.8/site-packages",
+        "/opt/ros/galactic/lib/python3.8/site-packages"
+    ]
+}
