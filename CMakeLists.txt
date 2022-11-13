@@ -7,8 +7,15 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
+install(DIRECTORY launch
+    DESTINATION share/${PROJECT_NAME}/launch
+)
+
 # find dependencies
 find_package(ament_cmake_auto REQUIRED)
+find_package(Eigen3 REQUIRED)
+
+include_directories(include ${EIGEN3_INCLUDE_DIR})
 ament_auto_find_build_dependencies()
 
 if(BUILD_TESTING)
@@ -24,20 +31,20 @@ if(BUILD_TESTING)
 endif()
 
 # Create the component target
-ament_auto_add_library(${PROJECT_NAME}-${COMP_NAME_LOWER}_component SHARED
+ament_auto_add_library(${COMP_NAME_LOWER}_component SHARED
     src/${COMP_NAME_LOWER}_component.cpp
 )
-target_compile_definitions(${PROJECT_NAME}-${COMP_NAME_LOWER}_component
+target_compile_definitions(${COMP_NAME_LOWER}_component
     PRIVATE ${PROJECT_NAME}_BUILDING_DLL)
-rclcpp_components_register_nodes(${PROJECT_NAME}-${COMP_NAME_LOWER}_component
+rclcpp_components_register_nodes(${COMP_NAME_LOWER}_component
     "${PROJECT_NAME}::EkfComponent")
 
 # Create the executor target
-ament_auto_add_executable(${PROJECT_NAME}-${COMP_NAME_LOWER}_node
+ament_auto_add_executable(${COMP_NAME_LOWER}_node
     NO_TARGET_LINK_LIBRARIES
     src/${COMP_NAME_LOWER}_node.cpp
 )
-target_link_libraries(${PROJECT_NAME}-${COMP_NAME_LOWER}_node
-    ${PROJECT_NAME}-${COMP_NAME_LOWER}_component)
+target_link_libraries(${COMP_NAME_LOWER}_node
+    ${COMP_NAME_LOWER}_component Eigen3::Eigen)
 
 ament_auto_package()
