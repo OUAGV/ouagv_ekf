@@ -34,24 +34,34 @@ namespace ouagv_ekf
     ScanMatchedPosesubscription_ =
         this->create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
             "/icp_matching/pose", 10,
-            std::bind(&EkfComponent::Pose_topic_callback, this, std::placeholders::_1));
+            std::bind(&EkfComponent::Observation, this, std::placeholders::_1));
     EstimatedPosepublisher_ =
         this->create_publisher<geometry_msgs::msg::PoseWithCovarianceStamped>("/estimated_pose", 10);
 
+    using namespace std::chrono_literals;
+    // 10msごとにPoseをpublishする
+    timer_ = this->create_wall_timer(10ms, std::bind(&EkfComponent::publishPose, this));
+
     XhatMinus = Eigen::VectorXd::Zero(3);
+    Xhat = Eigen::VectorXd::Zero(3);
     Pminus = Eigen::MatrixXd::Zero(3, 3);
     A = Eigen::MatrixXd::Zero(3, 3);
     B = Eigen::MatrixXd::Zero(2, 3);
     C = Eigen::MatrixXd::Zero(3, 3);
     Mt = Eigen::MatrixXd::Zero(2, 2);
+    G = Eigen::MatrixXd::Zero(3, 3);
+    R = Eigen::MatrixXd::Zero(3, 3);
+    C << 1, 0, 0,
+        0, 1, 0,
+        0, 0, 1;
   }
 
   void EkfComponent::prediction(const nav_msgs::msg::Odometry::ConstSharedPtr in1, const sensor_msgs::msg::Imu::ConstSharedPtr in2)
   {
-    if (isFirstSubscription)
+    if (isFirstPrediction || isFirstObservation)
     {
       prediction_timestamp = in1->header.stamp;
-      isFirstSubscription = false;
+      isFirstPrediction = false;
       return;
     }
     const double dt = (rclcpp::Time(in1->header.stamp) - prediction_timestamp).seconds();
@@ -83,10 +93,10 @@ namespace ouagv_ekf
     // 行列Aを更新
     A(0, 0) = 1;
     A(0, 1) = 0;
-    A(0, 2) = v / omega * (cos(X(2) + omega * dt) - cos(X(2)));
+    A(0, 2) = v / omega * (cos(Xhat(2) + omega * dt) - cos(Xhat(2)));
     A(1, 0) = 0;
     A(1, 1) = 1;
-    A(1, 2) = v / omega * (sin(X(2) + omega * dt) - sin(X(2)));
+    A(1, 2) = v / omega * (sin(Xhat(2) + omega * dt) - sin(Xhat(2)));
     A(2, 0) = 0;
     A(2, 1) = 0;
     A(2, 2) = 1;
@@ -97,10 +107,56 @@ namespace ouagv_ekf
     // std::cout << "A:" << A << std::endl;
 
     prediction_timestamp = in1->header.stamp;
+    publish_stamp = in1->header.stamp;
   }
 
-  void EkfComponent::Pose_topic_callback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
+  void EkfComponent::Observation(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg)
   {
+    Eigen::VectorXd Y(3);
+    Y(0) = msg->pose.pose.position.x;
+    Y(1) = msg->pose.pose.position.y;
+    Y(2) = tf2::getYaw(msg->pose.pose.orientation);
+    if (isFirstObservation || isFirstPrediction)
+    {
+      Xhat = Y;
+      isFirstObservation = false;
+      return;
+    }
+
+    // xの分散
+    R(0, 0) = msg->pose.covariance.at(0);
+    // yの分散
+    R(1, 1) = msg->pose.covariance.at(7);
+    // yawの分散
+    R(2, 2) = msg->pose.covariance.at(35);
+
+    // カルマンゲインを計算
+    G = Pminus * C * (C.transpose() * Pminus * C + R).transpose();
+
+    // フィルタリングステップ
+    Xhat = XhatMinus + G * (Y - C * XhatMinus);
+    Eigen::MatrixXd I = Eigen::MatrixXd::Identity(3, 3);
+    Phat = (I - G * C.transpose()) * Pminus;
+    publish_stamp = msg->header.stamp;
+  }
+
+  void EkfComponent::publishPose()
+  {
+    if (!isFirstObservation && !isFirstPrediction)
+    {
+      geometry_msgs::msg::PoseWithCovarianceStamped pose;
+      pose.header.frame_id = "odom";
+      pose.header.stamp = publish_stamp;
+      pose.pose.pose.position.x = Xhat(0);
+      pose.pose.pose.position.y = Xhat(1);
+      tf2::Quaternion quat;
+      quat.setRPY(0, 0, Xhat(2));
+      pose.pose.pose.orientation.x = quat.getX();
+      pose.pose.pose.orientation.x = quat.getY();
+      pose.pose.pose.orientation.x = quat.getZ();
+      pose.pose.pose.orientation.x = quat.getW();
+      EstimatedPosepublisher_->publish(pose);
+    }
   }
 } // namespace ouagv_ekf
 

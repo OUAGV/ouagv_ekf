@@ -20,7 +20,10 @@
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
 #include <message_filters/time_synchronizer.h>
-
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2/buffer_core.h>
+#include <tf2/utils.h>
+#include <tf2/LinearMath/Matrix3x3.h>
 #include <Eigen/Dense>
 #include <Eigen/LU>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
@@ -44,8 +47,6 @@ namespace ouagv_ekf
     OUAGV_EKF_PUBLIC
     explicit EkfComponent(const rclcpp::NodeOptions &options);
 
-    rclcpp::Time posetimestamp;
-
   private:
     rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
         ScanMatchedPosesubscription_;
@@ -54,34 +55,39 @@ namespace ouagv_ekf
 
     std::shared_ptr<OdomSubscriber> Odomsubscription_;
     std::shared_ptr<ImuSubscriber> Imusubscription_;
-
+    rclcpp::TimerBase::SharedPtr timer_;
     std::shared_ptr<message_filters::Synchronizer<SyncPolicy>> OdomImuSync_;
 
     // (x,y,theta)^T 状態ベクトルの予測
     Eigen::VectorXd XhatMinus;
     // (x,y,theta)^T 状態ベクトルの事後推定値
-    Eigen::VectorXd X;
+    Eigen::VectorXd Xhat;
     // 誤差共分散行列の予測
     Eigen::MatrixXd Pminus;
+    // 誤差共分散行列の事後推定値
+    Eigen::MatrixXd Phat;
     // 状態遷移モデルの関数fを状態ベクトルxで偏微分したヤコビ行列
     Eigen::MatrixXd A;
     // 状態遷移モデルの関数fを入力ベクトルu(v,omega)^Tで偏微分したヤコビ行列
     Eigen::MatrixXd B;
-    // 観測モデルの関数hをxで偏微分したヤコビ行列
+    // 観測モデルの観測行列
     Eigen::MatrixXd C;
     // 入力uの共分散行列
     Eigen::MatrixXd Mt;
+    // 観測モデルの共分散行列
+    Eigen::MatrixXd R;
+    // カルマンゲイン
+    Eigen::MatrixXd G;
 
     rclcpp::Time prediction_timestamp;
-    rclcpp::Time filtering_timestamp;
+    rclcpp::Time publish_stamp;
 
-    bool isFirstSubscription = true;
+    bool isFirstPrediction = true;
+    bool isFirstObservation = true;
 
     void prediction(
         const nav_msgs::msg::Odometry::ConstSharedPtr in1, const sensor_msgs::msg::Imu::ConstSharedPtr in2);
-    void Pose_topic_callback(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
-
-    void predict();
-    void filter();
+    void Observation(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
+    void publishPose();
   };
 } // namespace ouagv_ekf
