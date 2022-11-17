@@ -44,6 +44,7 @@ namespace ouagv_ekf
 
     XhatMinus = Eigen::VectorXd::Zero(3);
     Xhat = Eigen::VectorXd::Zero(3);
+    Phat = Eigen::MatrixXd::Zero(3, 3);
     Pminus = Eigen::MatrixXd::Zero(3, 3);
     A = Eigen::MatrixXd::Zero(3, 3);
     B = Eigen::MatrixXd::Zero(2, 3);
@@ -102,7 +103,7 @@ namespace ouagv_ekf
     A(2, 2) = 1;
 
     // 事前誤差共分散行列を更新
-    Pminus = A * Pminus * A.transpose() + B * Mt * B.transpose();
+    Pminus = A * Phat * A.transpose() + B * Mt * B.transpose();
 
     // std::cout << "A:" << A << std::endl;
 
@@ -155,6 +156,10 @@ namespace ouagv_ekf
       pose.pose.pose.orientation.x = quat.getY();
       pose.pose.pose.orientation.x = quat.getZ();
       pose.pose.pose.orientation.x = quat.getW();
+      pose.pose.covariance.at(0) = Phat(0);
+      pose.pose.covariance.at(7) = Phat(4);
+      pose.pose.covariance.at(35) = Phat(8);
+
       EstimatedPosepublisher_->publish(pose);
     }
   }
