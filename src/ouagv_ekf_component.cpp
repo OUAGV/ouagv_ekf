@@ -22,10 +22,15 @@
 
 namespace ouagv_ekf
 {
-  EkfComponent::EkfComponent(const rclcpp::NodeOptions &options) : Node("ouagv_ekf_node", options)
+  EkfComponent::EkfComponent(const rclcpp::NodeOptions &options)
+      : Node("ouagv_ekf_node", options),
+        isFirstPrediction(true),
+        isFirstObservation(true),
+        no_observation(true)
   {
     Odomsubscription_ = std::shared_ptr<OdomSubscriber>(new OdomSubscriber(this, "odom", rmw_qos_profile_sensor_data));
     Imusubscription_ = std::shared_ptr<ImuSubscriber>(new ImuSubscriber(this, "imu/data", rmw_qos_profile_sensor_data));
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(*this);
     OdomImuSync_ = std::make_shared<message_filters::Synchronizer<SyncPolicy>>(SyncPolicy(10),
                                                                                *Odomsubscription_, *Imusubscription_);
     OdomImuSync_->registerCallback(
@@ -47,7 +52,7 @@ namespace ouagv_ekf
     Phat = Eigen::MatrixXd::Zero(3, 3);
     Pminus = Eigen::MatrixXd::Zero(3, 3);
     A = Eigen::MatrixXd::Zero(3, 3);
-    B = Eigen::MatrixXd::Zero(2, 3);
+    B = Eigen::MatrixXd::Zero(3, 2);
     C = Eigen::MatrixXd::Zero(3, 3);
     Mt = Eigen::MatrixXd::Zero(2, 2);
     G = Eigen::MatrixXd::Zero(3, 3);
@@ -59,11 +64,23 @@ namespace ouagv_ekf
 
   void EkfComponent::prediction(const nav_msgs::msg::Odometry::ConstSharedPtr in1, const sensor_msgs::msg::Imu::ConstSharedPtr in2)
   {
-    if (isFirstPrediction || isFirstObservation)
+    if (no_observation)
     {
-      prediction_timestamp = in1->header.stamp;
-      isFirstPrediction = false;
-      return;
+      if (isFirstPrediction)
+      {
+        prediction_timestamp = in1->header.stamp;
+        isFirstPrediction = false;
+        return;
+      }
+    }
+    else
+    {
+      if (isFirstPrediction || isFirstObservation)
+      {
+        prediction_timestamp = in1->header.stamp;
+        isFirstPrediction = false;
+        return;
+      }
     }
     const double dt = (rclcpp::Time(in1->header.stamp) - prediction_timestamp).seconds();
     const double v = in1->twist.twist.linear.x;
@@ -94,16 +111,37 @@ namespace ouagv_ekf
     // 行列Aを更新
     A(0, 0) = 1;
     A(0, 1) = 0;
-    A(0, 2) = v / omega * (cos(Xhat(2) + omega * dt) - cos(Xhat(2)));
+    if (no_observation)
+    {
+      A(0, 2) = v / omega * (cos(XhatMinus(2) + omega * dt) - cos(XhatMinus(2)));
+    }
+    else
+    {
+      A(0, 2) = v / omega * (cos(Xhat(2) + omega * dt) - cos(Xhat(2)));
+    }
     A(1, 0) = 0;
     A(1, 1) = 1;
-    A(1, 2) = v / omega * (sin(Xhat(2) + omega * dt) - sin(Xhat(2)));
+    if (no_observation)
+    {
+      A(1, 2) = v / omega * (sin(XhatMinus(2) + omega * dt) - sin(XhatMinus(2)));
+    }
+    else
+    {
+      A(1, 2) = v / omega * (sin(Xhat(2) + omega * dt) - sin(Xhat(2)));
+    }
     A(2, 0) = 0;
     A(2, 1) = 0;
     A(2, 2) = 1;
 
     // 事前誤差共分散行列を更新
-    Pminus = A * Phat * A.transpose() + B * Mt * B.transpose();
+    if (no_observation)
+    {
+      Pminus = A * Pminus * A.transpose() + B * Mt * B.transpose();
+    }
+    else
+    {
+      Pminus = A * Phat * A.transpose() + B * Mt * B.transpose();
+    }
 
     // std::cout << "A:" << A << std::endl;
 
@@ -143,24 +181,75 @@ namespace ouagv_ekf
 
   void EkfComponent::publishPose()
   {
-    if (!isFirstObservation && !isFirstPrediction)
+    if (no_observation)
     {
-      geometry_msgs::msg::PoseWithCovarianceStamped pose;
-      pose.header.frame_id = "odom";
-      pose.header.stamp = publish_stamp;
-      pose.pose.pose.position.x = Xhat(0);
-      pose.pose.pose.position.y = Xhat(1);
-      tf2::Quaternion quat;
-      quat.setRPY(0, 0, Xhat(2));
-      pose.pose.pose.orientation.x = quat.getX();
-      pose.pose.pose.orientation.x = quat.getY();
-      pose.pose.pose.orientation.x = quat.getZ();
-      pose.pose.pose.orientation.x = quat.getW();
-      pose.pose.covariance.at(0) = Phat(0);
-      pose.pose.covariance.at(7) = Phat(4);
-      pose.pose.covariance.at(35) = Phat(8);
+      if (!isFirstPrediction)
+      {
+        geometry_msgs::msg::PoseWithCovarianceStamped pose;
+        pose.header.frame_id = "odom";
+        pose.header.stamp = publish_stamp;
+        pose.pose.pose.position.x = XhatMinus(0);
+        pose.pose.pose.position.y = XhatMinus(1);
+        tf2::Quaternion quat;
+        quat.setRPY(0, 0, XhatMinus(2));
+        pose.pose.pose.orientation.x = quat.getX();
+        pose.pose.pose.orientation.y = quat.getY();
+        pose.pose.pose.orientation.z = quat.getZ();
+        pose.pose.pose.orientation.w = quat.getW();
+        pose.pose.covariance.at(0) = Pminus(0);
+        pose.pose.covariance.at(7) = Pminus(4);
+        pose.pose.covariance.at(35) = Pminus(8);
 
-      EstimatedPosepublisher_->publish(pose);
+        EstimatedPosepublisher_->publish(pose);
+
+        geometry_msgs::msg::TransformStamped pose_transform_stamped;
+        pose_transform_stamped.header.stamp = publish_stamp;
+        pose_transform_stamped.header.frame_id = "odom";
+        pose_transform_stamped.child_frame_id = "base_link";
+        pose_transform_stamped.transform.translation.x = XhatMinus(0);
+        pose_transform_stamped.transform.translation.y = XhatMinus(1);
+        pose_transform_stamped.transform.translation.z = 0;
+        pose_transform_stamped.transform.rotation.x = quat.getX();
+        pose_transform_stamped.transform.rotation.y = quat.getY();
+        pose_transform_stamped.transform.rotation.z = quat.getZ();
+        pose_transform_stamped.transform.rotation.w = quat.getW();
+        tf_broadcaster_->sendTransform(pose_transform_stamped);
+      }
+    }
+    else
+    {
+      if (!isFirstObservation && !isFirstPrediction)
+      {
+        geometry_msgs::msg::PoseWithCovarianceStamped pose;
+        pose.header.frame_id = "odom";
+        pose.header.stamp = publish_stamp;
+        pose.pose.pose.position.x = Xhat(0);
+        pose.pose.pose.position.y = Xhat(1);
+        tf2::Quaternion quat;
+        quat.setRPY(0, 0, Xhat(2));
+        pose.pose.pose.orientation.x = quat.getX();
+        pose.pose.pose.orientation.x = quat.getY();
+        pose.pose.pose.orientation.x = quat.getZ();
+        pose.pose.pose.orientation.x = quat.getW();
+        pose.pose.covariance.at(0) = Phat(0);
+        pose.pose.covariance.at(7) = Phat(4);
+        pose.pose.covariance.at(35) = Phat(8);
+
+        EstimatedPosepublisher_->publish(pose);
+
+        geometry_msgs::msg::TransformStamped pose_transform_stamped;
+        pose_transform_stamped.header.stamp = publish_stamp;
+        pose_transform_stamped.header.frame_id = "odom";
+        pose_transform_stamped.child_frame_id = "base_link";
+        pose_transform_stamped.transform.translation.x = Xhat(0);
+        pose_transform_stamped.transform.translation.y = Xhat(1);
+        pose_transform_stamped.transform.translation.z = 0;
+        pose_transform_stamped.transform.rotation.x = quat.getX();
+        pose_transform_stamped.transform.rotation.y = quat.getY();
+        pose_transform_stamped.transform.rotation.z = quat.getZ();
+        pose_transform_stamped.transform.rotation.w = quat.getW();
+        tf_broadcaster_->sendTransform(pose_transform_stamped);
+      }
     }
   }
 } // namespace ouagv_ekf

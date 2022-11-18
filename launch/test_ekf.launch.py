@@ -25,7 +25,10 @@ def generate_launch_description():
     ekf = Node(package="ouagv_ekf",
                executable="ouagv_ekf_node", name="ouagv_ekf_node",
                output="screen")
+    map_to_odom = Node(package="tf2_ros", executable="static_transform_publisher", arguments=[
+        '0', '0', '0', '0', '0', '0', 'map', 'odom'])
 
     return LaunchDescription([
         simulator,
+        map_to_odom,
         ekf])

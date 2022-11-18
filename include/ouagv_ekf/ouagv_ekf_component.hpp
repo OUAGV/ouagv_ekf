@@ -24,6 +24,8 @@
 #include <tf2/buffer_core.h>
 #include <tf2/utils.h>
 #include <tf2/LinearMath/Matrix3x3.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/msg/transform_stamped.hpp>
 #include <Eigen/Dense>
 #include <Eigen/LU>
 #include <geometry_msgs/msg/pose_with_covariance_stamped.hpp>
@@ -57,6 +59,7 @@ namespace ouagv_ekf
     std::shared_ptr<ImuSubscriber> Imusubscription_;
     rclcpp::TimerBase::SharedPtr timer_;
     std::shared_ptr<message_filters::Synchronizer<SyncPolicy>> OdomImuSync_;
+    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
     // (x,y,theta)^T 状態ベクトルの予測
     Eigen::VectorXd XhatMinus;
@@ -82,8 +85,10 @@ namespace ouagv_ekf
     rclcpp::Time prediction_timestamp;
     rclcpp::Time publish_stamp;
 
-    bool isFirstPrediction = true;
-    bool isFirstObservation = true;
+    bool isFirstPrediction;
+    bool isFirstObservation;
+
+    const bool no_observation;
 
     void prediction(
         const nav_msgs::msg::Odometry::ConstSharedPtr in1, const sensor_msgs::msg::Imu::ConstSharedPtr in2);
