@@ -61,38 +61,40 @@ namespace ouagv_ekf
     std::shared_ptr<message_filters::Synchronizer<SyncPolicy>> OdomImuSync_;
     std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
 
-    // (x,y,theta)^T 状態ベクトルの予測
-    Eigen::VectorXd XhatMinus;
-    // (x,y,theta)^T 状態ベクトルの事後推定値
-    Eigen::VectorXd Xhat;
+    // (x,y,Vx,Vy,theta)^T 状態ベクトルの予測
+    Eigen::VectorXf XhatMinus;
+    // (x,y,Vx,Vy,theta)^T 状態ベクトルの事後推定値
+    Eigen::VectorXf Xhat;
     // 誤差共分散行列の予測
-    Eigen::MatrixXd Pminus;
+    Eigen::MatrixXf Pminus;
     // 誤差共分散行列の事後推定値
-    Eigen::MatrixXd Phat;
+    Eigen::MatrixXf Phat;
     // 状態遷移モデルの関数fを状態ベクトルxで偏微分したヤコビ行列
-    Eigen::MatrixXd A;
-    // 状態遷移モデルの関数fを入力ベクトルu(v,omega)^Tで偏微分したヤコビ行列
-    Eigen::MatrixXd B;
+    Eigen::MatrixXf A;
+    // 状態遷移モデルの関数fを入力ベクトルu(ax,ay,omega)^Tで偏微分したヤコビ行列
+    Eigen::MatrixXf B;
     // 観測モデルの観測行列
-    Eigen::MatrixXd C;
+    Eigen::MatrixXf C;
     // 入力uの共分散行列
-    Eigen::MatrixXd Mt;
+    Eigen::MatrixXf Mt;
     // 観測モデルの共分散行列
-    Eigen::MatrixXd R;
+    Eigen::MatrixXf R;
     // カルマンゲイン
-    Eigen::MatrixXd G;
+    Eigen::MatrixXf G;
+    // 観測値（x,y,theta）
+    Eigen::VectorXf Y;
 
-    rclcpp::Time prediction_timestamp;
+    rclcpp::Time update_timestamp;
     rclcpp::Time publish_stamp;
 
-    bool isFirstPrediction;
-    bool isFirstObservation;
-
-    const bool no_observation;
-
-    void prediction(
+    bool isFirstUpdate;
+    bool use_imu_acc;
+    bool use_odom_yaw;
+    float last_odom_vx = 0.f;
+    float last_odom_vy = 0.f;
+    int count = 0;
+    void update(
         const nav_msgs::msg::Odometry::ConstSharedPtr in1, const sensor_msgs::msg::Imu::ConstSharedPtr in2);
-    void Observation(const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg);
     void publishPose();
   };
 } // namespace ouagv_ekf

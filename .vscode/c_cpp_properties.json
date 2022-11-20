@@ -63,7 +63,7 @@
         "/home/tatsuki/colcon_ws/src/gazebo_ros2_control/gazebo_ros2_control/include/**",
         "/home/tatsuki/colcon_ws/src/icp_matching/include/**",
         "/home/tatsuki/colcon_ws/src/joy_to_twist/include/**",
-        "/home/tatsuki/colcon_ws/src/ouagv_extended_kalman_filter/include/**",
+        "/home/tatsuki/colcon_ws/src/ouagv_ekf/include/**",
         "/usr/include/**"
       ],
       "name": "ROS",
