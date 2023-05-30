@@ -39,10 +39,6 @@
 
 namespace ouagv_ekf
 {
-  typedef message_filters::Subscriber<nav_msgs::msg::Odometry> OdomSubscriber;
-  typedef message_filters::Subscriber<sensor_msgs::msg::Imu> ImuSubscriber;
-  typedef message_filters::sync_policies::ApproximateTime<nav_msgs::msg::Odometry, sensor_msgs::msg::Imu> SyncPolicy;
-
   class EkfComponent : public rclcpp::Node
   {
   public:
@@ -50,51 +46,6 @@ namespace ouagv_ekf
     explicit EkfComponent(const rclcpp::NodeOptions &options);
 
   private:
-    rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
-        ScanMatchedPosesubscription_;
-    rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
-        EstimatedPosepublisher_;
-
-    std::shared_ptr<OdomSubscriber> Odomsubscription_;
-    std::shared_ptr<ImuSubscriber> Imusubscription_;
-    rclcpp::TimerBase::SharedPtr timer_;
-    std::shared_ptr<message_filters::Synchronizer<SyncPolicy>> OdomImuSync_;
-    std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
-
-    // (x,y,Vx,Vy,theta)^T 状態ベクトルの予測
-    Eigen::VectorXf XhatMinus;
-    // (x,y,Vx,Vy,theta)^T 状態ベクトルの事後推定値
-    Eigen::VectorXf Xhat;
-    // 誤差共分散行列の予測
-    Eigen::MatrixXf Pminus;
-    // 誤差共分散行列の事後推定値
-    Eigen::MatrixXf Phat;
-    // 状態遷移モデルの関数fを状態ベクトルxで偏微分したヤコビ行列
-    Eigen::MatrixXf A;
-    // 状態遷移モデルの関数fを入力ベクトルu(ax,ay,omega)^Tで偏微分したヤコビ行列
-    Eigen::MatrixXf B;
-    // 観測モデルの観測行列
-    Eigen::MatrixXf C;
-    // 入力uの共分散行列
-    Eigen::MatrixXf Mt;
-    // 観測モデルの共分散行列
-    Eigen::MatrixXf R;
-    // カルマンゲイン
-    Eigen::MatrixXf G;
-    // 観測値（x,y,theta）
-    Eigen::VectorXf Y;
-
-    rclcpp::Time update_timestamp;
-    rclcpp::Time publish_stamp;
-
-    bool isFirstUpdate;
-    bool use_imu_acc;
-    bool use_odom_yaw;
-    float last_odom_vx = 0.f;
-    float last_odom_vy = 0.f;
-    int count = 0;
-    void update(
-        const nav_msgs::msg::Odometry::ConstSharedPtr in1, const sensor_msgs::msg::Imu::ConstSharedPtr in2);
-    void publishPose();
+  
   };
 } // namespace ouagv_ekf
