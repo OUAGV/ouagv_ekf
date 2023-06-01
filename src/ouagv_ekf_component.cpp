@@ -50,23 +50,18 @@ namespace ouagv_ekf
           RCLCPP_INFO(get_logger(), "odom subscribed");
           if(!first_odom_subscribed)
         {
+          last_odom_time = msg->header.stamp;
           RCLCPP_INFO(get_logger(), "first odom subscribed");
           first_odom_subscribed = true;
           current_pose = *msg;
-
-          X_predicted(0) = msg->pose.pose.position.x;
-          X_predicted(1) = msg->pose.pose.position.y;
+          X(0) = msg->pose.pose.position.x;
+          X(1) = msg->pose.pose.position.y;
           // geometry_msgs::msg::Quaternionをyawに変換
           const double yaw = tf2::getYaw(msg->pose.pose.orientation);
-          X_predicted(2) = yaw;
-          X_predicted(3) = msg->twist.twist.angular.z;
-          X_updated = X_predicted;
-
-          publishPose();
-          geometry_msgs::msg::PoseStamped pose;
-          pose.header = current_pose.header;
-          pose.pose = current_pose.pose.pose;
-          publishTF(pose);
+          X(2) = yaw;
+          X(3) = msg->twist.twist.angular.z;
+          publish(msg->header.stamp, X);
+          return;
         }
         predict(msg); });
     sub_pose = this->create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -91,10 +86,10 @@ namespace ouagv_ekf
             RCLCPP_WARN(get_logger(), "odom is not subscribed yet");
             return;
           }
-          // X_predictedとしてyaw, angular_velocityのみimuの値を使用
+          // Xとしてyaw, angular_velocityのみimuの値を使用
           const double yaw = tf2::getYaw(msg->orientation);
-          X_predicted(2) = yaw;
-          X_predicted(3) = msg->angular_velocity.z; });
+          X(2) = yaw;
+          X(3) = msg->angular_velocity.z; });
     }
 
     broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this);
@@ -111,10 +106,8 @@ namespace ouagv_ekf
       Q(3, 3) = sigma_imu;
     }
     R = Eigen::MatrixXd::Identity(3, 3) * sigma_ndt_pose;
-    P_predicted = Eigen::MatrixXd::Zero(4, 4);
-    P_updated = Eigen::MatrixXd::Zero(4, 4);
-    X_predicted = Eigen::VectorXd::Zero(4);
-    X_updated = Eigen::VectorXd::Zero(4);
+    P = Eigen::MatrixXd::Zero(4, 4);
+    X = Eigen::VectorXd::Zero(4);
     Y = Eigen::VectorXd::Zero(3);
 
     RCLCPP_INFO(get_logger(), "ouagv_ekf_node has been initialized.");
@@ -123,7 +116,7 @@ namespace ouagv_ekf
   /**
    * @brief  EKFの推定ステップ
    * imu未使用時はodomの情報を元に推定（XとしてOdomを使うだけ）
-   * P_predicted = Qで固定
+   * P = Qで固定
    * imu使用時はxとyのみ更新
    * Pもちゃんと更新
    * @param msg
@@ -132,22 +125,25 @@ namespace ouagv_ekf
   {
     if (use_imu)
     {
-      const double V = std::sqrt(std::pow(msg->twist.twist.linear.x, 2) + std::pow(msg->twist.twist.linear.y, 2));
-      X_predicted(0) = V * std::cos(X_predicted(2)) * dt + X_updated(0);
-      X_predicted(1) = V * std::sin(X_predicted(2)) * dt + X_updated(1);
-      A(0, 2) = V * std::cos(X_predicted(2)) * dt;
-      A(1, 2) = -V * std::sin(X_predicted(2)) * dt;
-      P_predicted = A * P_updated * A.transpose() + Q;
+      const double dt = (rclcpp::Time(msg->header.stamp) - last_odom_time).seconds();
+      const double V = msg->twist.twist.linear.x;
+      X(0) = V * std::cos(X(2)) * dt + X(0);
+      X(1) = V * std::sin(X(2)) * dt + X(1);
+      A(0, 2) = -V * std::sin(X(2)) * dt;
+      A(1, 2) = V * std::cos(X(2)) * dt;
+      P = A * P * A.transpose() + Q;
     }
     else
     {
       const double yaw = tf2::getYaw(msg->pose.pose.orientation);
-      X_predicted << msg->pose.pose.position.x,
+      X << msg->pose.pose.position.x,
           msg->pose.pose.position.y,
           yaw,
           msg->twist.twist.angular.z;
-      P_predicted = Q;
+      P = Q;
     }
+    last_odom_time = rclcpp::Time(msg->header.stamp);
+    publish(msg->header.stamp, X);
   }
 
   /**
@@ -163,82 +159,63 @@ namespace ouagv_ekf
     Y << msg->pose.position.x,
         msg->pose.position.y,
         yaw;
-    G = P_predicted * C.transpose() * (C * P_predicted * C.transpose() + R).inverse();
-    X_updated = X_predicted + G * (Y - C * X_predicted);
-    P_updated = (Eigen::MatrixXd::Identity(4, 4) - G * C) * P_predicted;
+    G = P * C.transpose() * (C * P * C.transpose() + R).inverse();
+    X = X + G * (Y - C * X);
+    P = (Eigen::MatrixXd::Identity(4, 4) - G * C) * P;
+    publish(msg->header.stamp, X);
+  }
 
+  /**
+   * @brief odomをpublishする
+   * tfもpublishする
+   * @param time
+   * @param X
+   */
+  void EkfComponent::publish(rclcpp::Time time, Eigen::VectorXd X)
+  {
+    // mutexをかける
+    std::lock_guard<std::mutex> lock(mutex);
     // current_poseに情報を入れる
-    current_pose.header = msg->header;
-    current_pose.pose.pose.position.x = X_updated(0);
-    current_pose.pose.pose.position.y = X_updated(1);
+    current_pose.header.stamp = time;
+    current_pose.header.frame_id = odom_frame_id;
+    current_pose.pose.pose.position.x = X(0);
+    current_pose.pose.pose.position.y = X(1);
     current_pose.pose.pose.position.z = 0.0;
     // yaw角の値からgeometry_msgs::msg::Quaternionを作成
     tf2::Quaternion q;
-    q.setRPY(0.0, 0.0, X_updated(2));
+    q.setRPY(0.0, 0.0, X(2));
     current_pose.pose.pose.orientation.x = q.x();
     current_pose.pose.pose.orientation.y = q.y();
     current_pose.pose.pose.orientation.z = q.z();
     current_pose.pose.pose.orientation.w = q.w();
-    current_pose.twist.twist.angular.z = X_updated(3);
-    publishPose();
+    current_pose.twist.twist.angular.z = X(3);
 
+    pub_odom->publish(current_pose);
     geometry_msgs::msg::PoseStamped pose;
     pose.header = current_pose.header;
     pose.pose = current_pose.pose.pose;
     publishTF(pose);
   }
 
-  void EkfComponent::publishPose()
-  {
-    pub_odom->publish(current_pose);
-  }
-
+  /**
+   * @brief odomからbase_linkのTFをpublishする
+   *
+   * @param pose
+   */
   void EkfComponent::publishTF(const geometry_msgs::msg::PoseStamped pose)
   {
-    geometry_msgs::msg::TransformStamped map_to_baselink_tf;
-    map_to_baselink_tf.header.frame_id = reference_frame_id;
-    map_to_baselink_tf.header.stamp = pose.header.stamp;
-    map_to_baselink_tf.child_frame_id = base_frame_id;
-    map_to_baselink_tf.transform.translation.x = pose.pose.position.x;
-    map_to_baselink_tf.transform.translation.y = pose.pose.position.y;
-    map_to_baselink_tf.transform.translation.z = pose.pose.position.z;
-    map_to_baselink_tf.transform.rotation.w = pose.pose.orientation.w;
-    map_to_baselink_tf.transform.rotation.x = pose.pose.orientation.x;
-    map_to_baselink_tf.transform.rotation.y = pose.pose.orientation.y;
-    map_to_baselink_tf.transform.rotation.z = pose.pose.orientation.z;
-
-    try
-    {
-      geometry_msgs::msg::TransformStamped odom_to_base_link_transform;
-      odom_to_base_link_transform = tf_buffer_ptr_->lookupTransform(odom_frame_id, base_frame_id, tf2::TimePointZero, tf2::durationFromSec(1.0));
-      geometry_msgs::msg::TransformStamped map_to_odom_transform;
-      map_to_odom_transform.header.frame_id = reference_frame_id;
-      map_to_odom_transform.child_frame_id = odom_frame_id;
-      map_to_odom_transform.header.stamp = pose.header.stamp;
-      // mapからbase_linkとodomからbase_linkの情報を元にmapからodomの情報を計算
-      map_to_odom_transform.transform = tf2::toMsg(
-          tf2::Transform(tf2::Quaternion(map_to_baselink_tf.transform.rotation.x,
-                                         map_to_baselink_tf.transform.rotation.y,
-                                         map_to_baselink_tf.transform.rotation.z,
-                                         map_to_baselink_tf.transform.rotation.w),
-                         tf2::Vector3(map_to_baselink_tf.transform.translation.x,
-                                      map_to_baselink_tf.transform.translation.y,
-                                      map_to_baselink_tf.transform.translation.z)) *
-          tf2::Transform(tf2::Quaternion(odom_to_base_link_transform.transform.rotation.x,
-                                         odom_to_base_link_transform.transform.rotation.y,
-                                         odom_to_base_link_transform.transform.rotation.z,
-                                         odom_to_base_link_transform.transform.rotation.w),
-                         tf2::Vector3(odom_to_base_link_transform.transform.translation.x,
-                                      odom_to_base_link_transform.transform.translation.y,
-                                      odom_to_base_link_transform.transform.translation.z))
-              .inverse());
-      broadcaster_->sendTransform(map_to_odom_transform);
-    }
-    catch (tf2::TransformException &ex)
-    {
-      RCLCPP_WARN(get_logger(), "%s", ex.what());
-      return;
-    }
+    geometry_msgs::msg::TransformStamped odom_to_baselink_tf;
+    odom_to_baselink_tf.header.frame_id = odom_frame_id;
+    odom_to_baselink_tf.header.stamp = pose.header.stamp;
+    odom_to_baselink_tf.child_frame_id = base_frame_id;
+    odom_to_baselink_tf.transform.translation.x = pose.pose.position.x;
+    odom_to_baselink_tf.transform.translation.y = pose.pose.position.y;
+    odom_to_baselink_tf.transform.translation.z = pose.pose.position.z;
+    odom_to_baselink_tf.transform.rotation.w = pose.pose.orientation.w;
+    odom_to_baselink_tf.transform.rotation.x = pose.pose.orientation.x;
+    odom_to_baselink_tf.transform.rotation.y = pose.pose.orientation.y;
+    odom_to_baselink_tf.transform.rotation.z = pose.pose.orientation.z;
+    broadcaster_->sendTransform(odom_to_baselink_tf);
   }
 } // namespace ouagv_ekf
 RCLCPP_COMPONENTS_REGISTER_NODE(ouagv_ekf::EkfComponent)

@@ -44,7 +44,7 @@ namespace ouagv_ekf
     OUAGV_EKF_PUBLIC
     explicit EkfComponent(const rclcpp::NodeOptions &options);
     void publishTF(const geometry_msgs::msg::PoseStamped pose);
-    void publishPose();
+    void publish(rclcpp::Time time, Eigen::VectorXd X);
     void predict(const nav_msgs::msg::Odometry::SharedPtr msg);
     void observe(const geometry_msgs::msg::PoseStamped::SharedPtr msg);
 
@@ -56,9 +56,11 @@ namespace ouagv_ekf
     std::unique_ptr<tf2_ros::TransformBroadcaster> broadcaster_;
     std::unique_ptr<tf2_ros::TransformListener> listener_;
     std::shared_ptr<tf2_ros::Buffer> tf_buffer_ptr_;
+    std::mutex mutex;
 
     bool first_odom_subscribed;
     nav_msgs::msg::Odometry current_pose;
+    rclcpp::Time last_odom_time;
 
     // parameters
     std::string reference_frame_id;
@@ -75,22 +77,19 @@ namespace ouagv_ekf
     double dt;
 
     // EKFに使う行列
-    // 事前状態推定ベクトル（x,y,yaw,yaw_rate）
-    Eigen::VectorXd X_predicted;
-    // 事前状態推定ベクトル（x,y,yaw,yaw_rate）
-    Eigen::VectorXd X_updated;
+    // 状態推定ベクトル（x,y,yaw,yaw_rate）
+    Eigen::VectorXd X;
+
     // 観測状態ベクトル (x,y,yaw)
     Eigen::VectorXd Y;
     // 状態方程式ヤコビ行列 4x4
     Eigen::MatrixXd A;
     // 観測方程式ヤコビ行列 3x4
     Eigen::MatrixXd C;
-    // 事前誤差共分散行列 4x4
-    Eigen::MatrixXd P_predicted;
+    // 誤差共分散行列 4x4
+    Eigen::MatrixXd P;
     // 推定誤差行列 4x4 対角成分がsigma_odomで他は0
     Eigen::MatrixXd Q;
-    // 事後誤差共分散行列 4x4
-    Eigen::MatrixXd P_updated;
     // 観測誤差行列 3x3 対角成分がsigma_ndt_poseで他は0
     Eigen::MatrixXd R;
     // カルマンゲイン 4x3
