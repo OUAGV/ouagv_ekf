@@ -1,0 +1,16 @@
+<launch>
+<node_container pkg="rclcpp_components" exec="component_container_mt" name="ouagv_ekf_container" namespace="ouagv_ekf" args="" output="screen">
+<composable_node name="ouagv_ekf_node" pkg="ouagv_ekf" plugin="ouagv_ekf::EkfComponent">
+    <param name="reference_frame_id" value="map"/>
+    <param name="base_frame_id" value="base_link"/>
+    <!-- localization時odomの誤差は大きめ、NDTの誤差は小さめにしないと破綻する -->
+    <param name="sigma_odom" value="0.01"/>
+    <param name="sigma_ndt_pose" value="0.01"/>
+    <param name="sigma_imu" value="0.001"/>
+    <param name="use_imu" value="true"/>
+    <param name="dt" value="0.005"/>
+    <remap from="/odom" to="/diff_drive_base_controller/odom"/>
+    <remap from="/imu" to="/imu/data"/>
+</composable_node>
+</node_container>
+</launch>
