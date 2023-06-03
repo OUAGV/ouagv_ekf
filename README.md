@@ -1,6 +1,9 @@
 # ouagv_ekf
 拡張カルマンフィルタを行うノード
 
+# environment
+- ROS2 Humble
+- Ubuntu 22.04
 # overview
 ## parameter
 | パラメータ名 | 説明 | 初期値 |
