@@ -12,22 +12,32 @@
 | sigma_ndt_pose | NDTポーズのノイズの標準偏差 | 0.00001 |
 | sigma_imu | IMUのノイズの標準偏差 | 0.000001 |
 | use_imu | IMUを使用するかどうかのフラグ | false |
-| dt | タイムステップの時間間隔 | 0.01 |
+
+### parameter tuning
+sigma_odomを小さくしてsigma_ndt_poseを大きくするとodomを信用するようになる、逆も然り
+
+launchファイルではodomを強めに信頼している
 
 ## subscribe
-- odom (nav_msgs::msg::Odometry) 
+- /odom (nav_msgs::msg::Odometry) 
   - デッドレコニングで得られた機体の姿勢と速度
-- imu (sensor_msgs::msg::Imu)  
+- /imu (sensor_msgs::msg::Imu)  
   - IMUから得られる機体の角度、角速度
   - use_imuがFalseならsubscribeしない   
-- ndt_pose (geometry_msgs::msg::PoseStamped)
+- /ndt_pose (geometry_msgs::msg::PoseStamped)
   - NDTマッチングで得られた機体の姿勢
 
 ## publish
-- current_pose_twist(nav_msgs::msg::Odometry)
+- /current_pose_twist (nav_msgs::msg::Odometry)
   - EKFで推定した機体の姿勢と速度
-- tf 
+- /tf 
   - odom->base_link
+
+# usage
+```
+ros2 launch ouagv_ekf ouagv_ekf.launch.xml
+```
+
 
 
 # calculation
